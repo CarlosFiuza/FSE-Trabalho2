@@ -32,7 +32,7 @@
 
 int uart_fs;
 
-int init_UART()
+int uart_init()
 {
   uart_fs = open(dev_path_uart, O_RDWR | O_NOCTTY | O_NDELAY);
   if (uart_fs == -1)
@@ -316,7 +316,7 @@ int uart_turn_off_warming(int *warming_stt)
   memcpy(&state_read, &buffer[3], 1);
 
   *warming_stt = 0;
-  
+
   if (status != 0 || state_read != state)
   {
     // fprintf(stderr, "Falha ao desligar aquecimento\n");

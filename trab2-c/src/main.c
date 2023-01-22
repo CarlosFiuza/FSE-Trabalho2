@@ -14,6 +14,7 @@
 #include <softPwm.h>
 #include <time.h>
 #include "uart.h"
+#include "logger.h"
 
 #define pin_res 4
 #define pin_cooler 5
@@ -37,6 +38,8 @@ uint32_t req_delay;
 clock_t time_curve_mode;
 float last_tr = 30.0f;
 float last_ti = 25.0f;
+int sig_value_res = 0;
+int sig_value_cooler = 0;
 
 int init_GPIO(int pin_gpio1, int pin_gpio2)
 {
@@ -268,16 +271,22 @@ int gpio_update_pwm(int signal)
   {
     softPwmWrite(pin_res, signal);
     softPwmWrite(pin_cooler, 0);
+    sig_value_res = signal;
+    sig_value_cooler = 0;
   }
   else if (signal < 0)
   {
     softPwmWrite(pin_cooler, signal);
     softPwmWrite(pin_res, 0);
+    sig_value_res = 0;
+    sig_value_cooler = signal;
   }
   else
   {
     softPwmWrite(pin_cooler, 0);
     softPwmWrite(pin_res, 0);
+    sig_value_res = 0;
+    sig_value_cooler = 0;
   }
 
   return 0;
@@ -328,8 +337,6 @@ int temperature_control()
   }
   else if (warming_stt == 1 && temp_mode_stt == 1)
   {
-    // catch reference temperatura from curve
-    // send temperature to uart
     clock_t time_now = clock();
     double diff_time = ((double)time_now - time_curve_mode) / CLOCKS_PER_SEC;
     tr = get_tr_by_curve(diff_time);
@@ -348,8 +355,12 @@ int temperature_control()
 
     status = gpio_update_pwm((int)signal_ctrl);
   }
+  else {
+    sig_value_res = 0;
+    sig_value_cooler = 0;
+  }
 
-  fflush(stdout);
+  log_write(ti, ta, tr, sig_value_res, sig_value_cooler);
 
   return 0;
 }
@@ -417,9 +428,7 @@ void main_loop()
     // to read usr comm in 500ms and control temp in 1s
     if (count_sleep == 2)
     {
-      printf("1 sys %d warm %d mode %d\n", system_stt, warming_stt, temp_mode_stt);
       temperature_control();
-      printf("2 sys %d warm %d mode %d\n", system_stt, warming_stt, temp_mode_stt);
       count_sleep = 0;
     }
 
@@ -437,6 +446,8 @@ void terminate_prog(int d)
   uart_terminate(&system_stt, &warming_stt, &temp_mode_stt);
 
   gpio_update_pwm(0);
+
+  log_close();
 
   exit(1);
 }
@@ -464,10 +475,17 @@ int main(int argc, char **argv)
   }
 
   // init serial connection UART with ESCP32 in MODBUS protocol
-  status = init_UART();
+  status = uart_init();
   if (status != 0)
   {
     fprintf(stderr, "Falha em iniciar conexão com ESP32\n");
+    exit(EXIT_FAILURE);
+  }
+
+  status = log_init_file();
+  if (status != 0)
+  {
+    fprintf(stderr, "Falha em abrir arquivo de log\n");
     exit(EXIT_FAILURE);
   }
 

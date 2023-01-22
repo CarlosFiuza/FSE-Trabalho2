@@ -1,8 +1,8 @@
 #ifndef UART_H_
-#define UART_h_
+#define UART_H_
 #include <time.h>
 
-int init_UART();
+int uart_init();
 int uart_read_usr_commands(int *command);
 int uart_turn_on_oven(int *system_stt);
 int uart_turn_off_oven(int *system_stt);
