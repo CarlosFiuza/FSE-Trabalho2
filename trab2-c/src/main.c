@@ -10,6 +10,9 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include "crc16.h"
+#include "pid.h"
+#include <wiringPi.h>
+#include <time.h>
 
 #define pin_res 23
 #define pin_cooler 24
@@ -52,9 +55,20 @@ struct bme280_dev *dev1;
 int8_t rslt = BME280_OK;
 struct bme280_data comp_data;
 uint32_t req_delay;
+clock_t time_curve_mode;
 
 int init_GPIO(int pin_gpio1, int pin_gpio2)
 {
+  if (wiringPiSetup() == -1) {
+    fprintf(stderr, "Falha em configurar wiringPi\n");
+    return -1;
+  }
+
+  pinMode(pin_gpio1, PWM_OUTPUT);
+  pinMode(pin_gpio2, PWM_OUTPUT);
+
+  pwmSetRange(100);
+
   return 0;
 }
 
@@ -445,6 +459,10 @@ int uart_turn_on_warming()
 
   warming_stt = 1;
 
+  if (temp_mode_stt == 1) {
+    time_curve_mode = clock();
+  }
+
   return 0;
 }
 
@@ -628,6 +646,68 @@ int uart_read_tr(float *tr)
   return 0;
 }
 
+int uart_send_ctrl_signal(int signal)
+{
+  // have to send control signal
+  unsigned char data[9];
+  data[0] = subcode_send_ctrl;
+  data[1] = mat_1;
+  data[2] = mat_2;
+  data[3] = mat_3;
+  data[4] = mat_4;
+  memcpy(&data[5], &signal, 4);
+  int bytes = uart_write(esp32_add, code_send, data, 9);
+
+  if (bytes != 13)
+  {
+    fprintf(stderr, "Falha ao enviar sinal de controle\n");
+    return -1;
+  }
+
+  sleep(0.03);
+  unsigned char buffer[10];
+  int status = uart_read(buffer, subcode_send_ctrl);
+
+  if (status != 0)
+  {
+    fprintf(stderr, "Falha ao enviar sinal de controle\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+int uart_send_ref_signal(float signal)
+{
+  // have to send control signal
+  unsigned char data[9];
+  data[0] = subcode_send_sign_ref;
+  data[1] = mat_1;
+  data[2] = mat_2;
+  data[3] = mat_3;
+  data[4] = mat_4;
+  memcpy(&data[5], &signal, 4);
+  int bytes = uart_write(esp32_add, code_send, data, 9);
+
+  if (bytes != 13)
+  {
+    fprintf(stderr, "Falha ao enviar sinal de referencia\n");
+    return -1;
+  }
+
+  sleep(0.03);
+  unsigned char buffer[10];
+  int status = uart_read(buffer, subcode_send_sign_ref);
+
+  if (status != 0)
+  {
+    fprintf(stderr, "Falha ao enviar sinal de referencia\n");
+    return -1;
+  }
+
+  return 0;
+}
+
 int i2c_read_ta(float *ta)
 {
   *ta = 24.2f;
@@ -666,6 +746,58 @@ int i2c_read_ta(float *ta)
   // return 0;
 }
 
+float get_tr_by_curve(double seconds)
+{
+  if (seconds < 60.0) {
+    return 25.0f;
+  }
+  else if (seconds < 120) {
+    return 38.0f;
+  }
+  else if (seconds < 240) {
+    return 46.0f;
+  }
+  else if (seconds < 260) {
+    return 54.0f;
+  }
+  else if (seconds < 300) {
+    return 57.0f;
+  }
+  else if (seconds < 360) {
+    return 61.0f;
+  }
+  else if (seconds < 420) {
+    return 63.0f;
+  }
+  else if (seconds < 480) {
+    return 54.0f;
+  }
+  else if (seconds < 600) {
+    return 33.0f;
+  }
+  else {
+    return 25.0f;
+  }
+}
+
+int gpio_update_pwm(int signal)
+{
+  if (signal > 0) {
+    pwmWrite(pin_res, signal);
+    pwmWrite(pin_cooler, 0);
+  }
+  else if (signal < 0) {
+    pwmWrite(pin_cooler, signal);
+    pwmWrite(pin_res, 0);
+  }
+  else {
+    pwmWrite(pin_cooler, 0);
+    pwmWrite(pin_res, 0);
+  }
+
+  return 0;
+}
+
 int temperature_control()
 {
   float ta, ti, tr;
@@ -687,12 +819,32 @@ int temperature_control()
     printf("TI: %f\n", ti);
   }
 
-  status = uart_read_tr(&tr);
-  if (status != 0) {
-    tr = 30.0f;
-  } else {
-    printf("TR: %f\n", tr);
+  if (temp_mode_stt == 0) {
+    status = uart_read_tr(&tr);
+    if (status != 0) {
+      tr = 30.0f;
+    }
   }
+  else {
+    // catch reference temperatura from curve
+    // send temperature to uart
+    clock_t time_now = clock();
+    double diff_time = ((double) time_now - time_curve_mode) / CLOCKS_PER_SEC;
+    tr = get_tr_by_curve(diff_time);
+
+    status = uart_send_ref_signal(tr);
+  }
+
+  printf("TR: %f\n", tr);
+
+  pid_atualiza_referencia(tr);
+
+  double signal_ctrl;
+  signal_ctrl = pid_controle((double) ti);
+
+  status = uart_send_ctrl_signal((int) signal_ctrl);
+
+  status = gpio_update_pwm((int) signal_ctrl);
 
   fflush(stdout);
 
@@ -719,7 +871,7 @@ int terminate_uart()
 
 void main_loop()
 {
-  int status, command;
+  int status, command, count_sleep = 0;
 
   while (1)
   {
@@ -777,7 +929,12 @@ void main_loop()
       break;
     }
 
-    temperature_control();
+    count_sleep++;
+    //to read usr comm in 500ms and control temp in 1s
+    if (count_sleep == 2) {
+      temperature_control();
+      count_sleep = 0;
+    }
 
     sleep(3);
   }
@@ -822,6 +979,9 @@ int main(int argc, char **argv)
     fprintf(stderr, "Falha em iniciar conexão com ESP32\n");
     exit(EXIT_FAILURE);
   }
+
+  // configure parameters pid
+  pid_configura_constantes(30.0, 0.2, 400.0);
 
   // init system state
   init_system_state();
