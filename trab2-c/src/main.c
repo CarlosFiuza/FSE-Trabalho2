@@ -5,56 +5,16 @@
 #include <termios.h>
 #include <string.h>
 #include <signal.h>
-
-short CRC16(short crc, char data)
-{
-    const short tbl[256] = {
-        0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
-        0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
-        0xCC01, 0x0CC0, 0x0D80, 0xCD41, 0x0F00, 0xCFC1, 0xCE81, 0x0E40,
-        0x0A00, 0xCAC1, 0xCB81, 0x0B40, 0xC901, 0x09C0, 0x0880, 0xC841,
-        0xD801, 0x18C0, 0x1980, 0xD941, 0x1B00, 0xDBC1, 0xDA81, 0x1A40,
-        0x1E00, 0xDEC1, 0xDF81, 0x1F40, 0xDD01, 0x1DC0, 0x1C80, 0xDC41,
-        0x1400, 0xD4C1, 0xD581, 0x1540, 0xD701, 0x17C0, 0x1680, 0xD641,
-        0xD201, 0x12C0, 0x1380, 0xD341, 0x1100, 0xD1C1, 0xD081, 0x1040,
-        0xF001, 0x30C0, 0x3180, 0xF141, 0x3300, 0xF3C1, 0xF281, 0x3240,
-        0x3600, 0xF6C1, 0xF781, 0x3740, 0xF501, 0x35C0, 0x3480, 0xF441,
-        0x3C00, 0xFCC1, 0xFD81, 0x3D40, 0xFF01, 0x3FC0, 0x3E80, 0xFE41,
-        0xFA01, 0x3AC0, 0x3B80, 0xFB41, 0x3900, 0xF9C1, 0xF881, 0x3840,
-        0x2800, 0xE8C1, 0xE981, 0x2940, 0xEB01, 0x2BC0, 0x2A80, 0xEA41,
-        0xEE01, 0x2EC0, 0x2F80, 0xEF41, 0x2D00, 0xEDC1, 0xEC81, 0x2C40,
-        0xE401, 0x24C0, 0x2580, 0xE541, 0x2700, 0xE7C1, 0xE681, 0x2640,
-        0x2200, 0xE2C1, 0xE381, 0x2340, 0xE101, 0x21C0, 0x2080, 0xE041,
-        0xA001, 0x60C0, 0x6180, 0xA141, 0x6300, 0xA3C1, 0xA281, 0x6240,
-        0x6600, 0xA6C1, 0xA781, 0x6740, 0xA501, 0x65C0, 0x6480, 0xA441,
-        0x6C00, 0xACC1, 0xAD81, 0x6D40, 0xAF01, 0x6FC0, 0x6E80, 0xAE41,
-        0xAA01, 0x6AC0, 0x6B80, 0xAB41, 0x6900, 0xA9C1, 0xA881, 0x6840,
-        0x7800, 0xB8C1, 0xB981, 0x7940, 0xBB01, 0x7BC0, 0x7A80, 0xBA41,
-        0xBE01, 0x7EC0, 0x7F80, 0xBF41, 0x7D00, 0xBDC1, 0xBC81, 0x7C40,
-        0xB401, 0x74C0, 0x7580, 0xB541, 0x7700, 0xB7C1, 0xB681, 0x7640,
-        0x7200, 0xB2C1, 0xB381, 0x7340, 0xB101, 0x71C0, 0x7080, 0xB041,
-        0x5000, 0x90C1, 0x9181, 0x5140, 0x9301, 0x53C0, 0x5280, 0x9241,
-        0x9601, 0x56C0, 0x5780, 0x9741, 0x5500, 0x95C1, 0x9481, 0x5440,
-        0x9C01, 0x5CC0, 0x5D80, 0x9D41, 0x5F00, 0x9FC1, 0x9E81, 0x5E40,
-        0x5A00, 0x9AC1, 0x9B81, 0x5B40, 0x9901, 0x59C0, 0x5880, 0x9841,
-        0x8801, 0x48C0, 0x4980, 0x8941, 0x4B00, 0x8BC1, 0x8A81, 0x4A40,
-        0x4E00, 0x8EC1, 0x8F81, 0x4F40, 0x8D01, 0x4DC0, 0x4C80, 0x8C41,
-        0x4400, 0x84C1, 0x8581, 0x4540, 0x8701, 0x47C0, 0x4680, 0x8641,
-        0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040};
-    return ((crc & 0xFF00) >> 8) ^ tbl[(crc & 0x00FF) ^ (data & 0x00FF)];
-}
-
-short calcula_CRC(short crc, unsigned char *commands, int size) {
-	int i;
-	for(i=0;i<size;i++) {
-		crc = CRC16(crc, commands[i]);
-	}
-	return crc;
-}
+#include "bme280.h"
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include "crc16.h"
 
 #define pin_res 23
 #define pin_cooler 24
 #define dev_path_i2c "/dev/i2c-1"
+#define i2c_add 0x76
 #define dev_path_uart "/dev/serial0"
 
 #define esp32_add 0x01
@@ -83,24 +43,152 @@ short calcula_CRC(short crc, unsigned char *commands, int size) {
 #define usr_off_warming 0xA4
 #define usr_menu 0xA5
 
-//global variables
+// global variables
 int system_stt;
 int warming_stt;
 int temp_mode_stt;
 int uart_fs;
+struct bme280_dev *dev1;
+int8_t rslt = BME280_OK;
+struct bme280_data comp_data;
+uint32_t req_delay;
 
-
-int init_GPIO(int pin_gpio1, int pin_gpio2) {
+int init_GPIO(int pin_gpio1, int pin_gpio2)
+{
   return 0;
 }
 
-int init_I2C(char *device_path) {
+struct identifier
+{
+  /* Variable to hold device address */
+  uint8_t dev_addr;
+
+  /* Variable that contains file descriptor */
+  int8_t fd;
+};
+
+int8_t user_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len, void *intf_ptr)
+{
+  struct identifier id;
+
+  id = *((struct identifier *)intf_ptr);
+
+  write(id.fd, &reg_addr, 1);
+  read(id.fd, data, len);
+
   return 0;
 }
 
-int init_UART(char *device_path) {
-  uart_fs = open(device_path, O_RDWR | O_NOCTTY | O_NDELAY );
-  if (uart_fs == -1) {
+int8_t user_i2c_write(uint8_t reg_addr, const uint8_t *data, uint32_t len, void *intf_ptr)
+{
+  uint8_t *buf;
+  struct identifier id;
+
+  id = *((struct identifier *)intf_ptr);
+
+  buf = malloc(len + 1);
+  buf[0] = reg_addr;
+  memcpy(buf + 1, data, len);
+  if (write(id.fd, buf, len + 1) < (uint16_t)len)
+  {
+    return BME280_E_COMM_FAIL;
+  }
+
+  free(buf);
+
+  return BME280_OK;
+}
+
+void user_delay_us(uint32_t period, void *intf_ptr)
+{
+  usleep(period);
+}
+
+int8_t set_stream_sensor_data_forced_mode()
+{
+    /* Variable to define the result */
+    rslt = BME280_OK;
+
+    /* Variable to define the selecting sensors */
+    uint8_t settings_sel = 0;
+
+    /* Variable to store minimum wait time between consecutive measurement in force mode */
+
+    /* Recommended mode of operation: Indoor navigation */
+    dev1->settings.osr_h = BME280_OVERSAMPLING_1X;
+    dev1->settings.osr_p = BME280_OVERSAMPLING_16X;
+    dev1->settings.osr_t = BME280_OVERSAMPLING_2X;
+    dev1->settings.filter = BME280_FILTER_COEFF_16;
+
+    settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
+
+    /* Set the sensor settings */
+    rslt = bme280_set_sensor_settings(settings_sel, dev1);
+    if (rslt != BME280_OK)
+    {
+        fprintf(stderr, "Failed to set sensor settings (code %+d).", rslt);
+
+        return rslt;
+    }
+
+    printf("Temperature, Pressure, Humidity\n");
+
+    /*Calculate the minimum delay required between consecutive measurement based upon the sensor enabled
+     *  and the oversampling configuration. */
+    req_delay = bme280_cal_meas_delay(&dev1->settings);
+
+    return rslt;
+}
+
+int init_I2C(char *device_path)
+{
+  struct bme280_dev dev;
+  struct identifier id;
+
+  int8_t rslt = BME280_OK;
+
+  if ((id.fd = open(dev_path_i2c, O_RDWR)) < 0)
+  {
+    fprintf(stderr, "Falha em i2c bus\n");
+    return -1;
+  }
+
+  if (ioctl(id.fd, I2C_SLAVE, i2c_add) < 0)
+  {
+    fprintf(stderr, "Falha endereco i2c\n");
+    return -2;
+  }
+
+  id.dev_addr = BME280_I2C_ADDR_PRIM;
+
+  dev.intf = BME280_I2C_INTF;
+  dev.read = user_i2c_read;
+  dev.write = user_i2c_write;
+  dev.delay_us = user_delay_us;
+
+  dev.intf_ptr = &id;
+
+  rslt = bme280_init(&dev);
+  if (rslt != BME280_OK)
+  {
+    fprintf(stderr, "Failed to initialize the device (code %+d).\n", rslt);
+    exit(1);
+  }
+
+  rslt = set_stream_sensor_data_forced_mode(&dev);
+  if (rslt != BME280_OK)
+  {
+    fprintf(stderr, "Failed to stream sensor data (code %+d).\n", rslt);
+    exit(1);
+  }
+  return 0;
+}
+
+int init_UART(char *device_path)
+{
+  uart_fs = open(device_path, O_RDWR | O_NOCTTY | O_NDELAY);
+  if (uart_fs == -1)
+  {
     return uart_fs;
   }
 
@@ -117,48 +205,55 @@ int init_UART(char *device_path) {
   return 0;
 }
 
-char verify_sub_code(char sub_code_read) {
-  switch (sub_code_read) {
-    case subcode_req_ti:
-      return subcode_req_ti;
-    case subcode_req_tr:
-      return subcode_req_tr;
-    case subcode_req_comm:
-      return subcode_req_comm;
-    case subcode_send_ctrl:
-      return subcode_send_ctrl;
-    case subcode_send_wrk_state:
-      return subcode_send_wrk_state;
-    case subcode_send_ta:
-      return subcode_send_ta;
-    default:
-      return -1;
+char verify_sub_code(char sub_code_read)
+{
+  switch (sub_code_read)
+  {
+  case subcode_req_ti:
+    return subcode_req_ti;
+  case subcode_req_tr:
+    return subcode_req_tr;
+  case subcode_req_comm:
+    return subcode_req_comm;
+  case subcode_send_ctrl:
+    return subcode_send_ctrl;
+  case subcode_send_wrk_state:
+    return subcode_send_wrk_state;
+  case subcode_send_ta:
+    return subcode_send_ta;
+  default:
+    return -1;
   }
 }
 
-int uart_read(unsigned char *buffer, char sub_code) {
+int uart_read(unsigned char *buffer, char sub_code)
+{
   int bytes_read = read(uart_fs, &buffer[0], 3);
 
-  if (bytes_read < 0) {
+  if (bytes_read < 0)
+  {
     fprintf(stderr, "Falha na leitura UART\n");
     return -1;
   }
-  else if (bytes_read == 0) {
-   //fprintf(stderr, "Nenhum dado na leitura UART\n");
+  else if (bytes_read == 0)
+  {
+    // fprintf(stderr, "Nenhum dado na leitura UART\n");
     return -2;
   }
-  //verifica sub_code
+  // verifica sub_code
   char sub_code_read = buffer[2];
 
-  if (sub_code != '0' && sub_code_read != sub_code) {
+  if (sub_code != '0' && sub_code_read != sub_code)
+  {
     fprintf(stderr, "Sub-code recebido invalido\n");
     return -3;
   }
 
-  //calcula CRC para conferir dados
+  // calcula CRC para conferir dados
   short crc_read;
 
-  if (sub_code_read == subcode_send_ctrl || sub_code_read == subcode_send_sign_ref) {
+  if (sub_code_read == subcode_send_ctrl || sub_code_read == subcode_send_sign_ref)
+  {
     return 0;
   }
 
@@ -170,7 +265,8 @@ int uart_read(unsigned char *buffer, char sub_code) {
   crc = CRC16(crc, buffer[1]);
   crc = calcula_CRC(crc, &buffer[2], 5);
 
-  if (crc != crc_read) {
+  if (crc != crc_read)
+  {
     fprintf(stderr, "Crc invalido\n");
     return -4;
   }
@@ -178,7 +274,8 @@ int uart_read(unsigned char *buffer, char sub_code) {
   return 0;
 }
 
-int uart_write(char addr, char code, unsigned char* data, int size) {
+int uart_write(char addr, char code, unsigned char *data, int size)
+{
   short crc = 0;
   int bytes_sended = 0;
 
@@ -196,8 +293,9 @@ int uart_write(char addr, char code, unsigned char* data, int size) {
   return bytes_sended;
 }
 
-int uart_read_usr_commands(int *command) {
-  //printf("Lendo comandos\n");
+int uart_read_usr_commands(int *command)
+{
+  // printf("Lendo comandos\n");
   unsigned char data[5];
   data[0] = subcode_req_comm;
   data[1] = mat_1;
@@ -206,23 +304,26 @@ int uart_read_usr_commands(int *command) {
   data[4] = mat_4;
   int bytes = uart_write(esp32_add, code_req, data, 5);
 
-  if (bytes != 9) {
+  if (bytes != 9)
+  {
     fprintf(stderr, "Falha ao requisitar comandos usuario\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
 
   unsigned char buffer[10];
   int status = uart_read(buffer, '0');
 
-  if (status < 0) {
+  if (status < 0)
+  {
     memset(buffer, 0, 255);
     status = uart_read(buffer, '0');
   }
 
-  if (status < 0) {
-    //printf("Falha na leitura de comandos do usr\n");
+  if (status < 0)
+  {
+    // printf("Falha na leitura de comandos do usr\n");
     return -1;
   }
 
@@ -231,8 +332,9 @@ int uart_read_usr_commands(int *command) {
   return 0;
 }
 
-int uart_turn_on_oven() {
-  //have to turn on led
+int uart_turn_on_oven()
+{
+  // have to turn on led
   unsigned char data[6];
   int state = 1;
   data[0] = subcode_send_sys_state;
@@ -243,19 +345,22 @@ int uart_turn_on_oven() {
   data[5] = 1;
   int bytes = uart_write(esp32_add, code_send, data, 6);
 
-  if (bytes != 10) {
+  if (bytes != 10)
+  {
     fprintf(stderr, "Falha ao ligar sistema\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_send_sys_state);
 
   int state_read;
-  memcpy(&state_read, &buffer[3], 4);
+  memcpy(&state_read, &buffer[3], 1);
+  printf("state_read uart_turn_on_oven: %d\n", state_read);
 
-  if (status != 0 || state_read != state) {
+  if (status != 0 || state_read != state)
+  {
     fprintf(stderr, "Falha ao ligar sistema\n");
     return -1;
   }
@@ -264,8 +369,9 @@ int uart_turn_on_oven() {
   return 0;
 }
 
-int uart_turn_off_oven() {
-  //have to turn off led
+int uart_turn_off_oven()
+{
+  // have to turn off led
   unsigned char data[6];
   int state = 0;
   data[0] = subcode_send_sys_state;
@@ -274,34 +380,38 @@ int uart_turn_off_oven() {
   data[3] = mat_3;
   data[4] = mat_4;
   data[5] = 0;
-  
+
   int bytes = uart_write(esp32_add, code_send, data, 6);
-  
-  if (bytes != 10) {
+
+  if (bytes != 10)
+  {
     fprintf(stderr, "Falha ao desligar sistema\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_send_sys_state);
 
   int state_read;
-  memcpy(&state_read, &buffer[3], 4);
+  memcpy(&state_read, &buffer[3], 1);
+  printf("state_read uart_turn_off_oven: %d\n", state_read);
 
-  if (status != 0 || state_read != state) {
+  if (status != 0 || state_read != state)
+  {
     fprintf(stderr, "Falha ao desligar sistema\n");
     return -1;
   }
 
-  system_stt = 0;  
+  system_stt = 0;
   return 0;
 }
 
-int uart_turn_on_warming() {
-  //have to look oven mode
-  //have to turn on led
-  //have to init warming
+int uart_turn_on_warming()
+{
+  // have to look oven mode
+  // have to turn on led
+  // have to init warming
   unsigned char data[6];
   int state = 1;
   data[0] = subcode_send_wrk_state;
@@ -310,34 +420,38 @@ int uart_turn_on_warming() {
   data[3] = mat_3;
   data[4] = mat_4;
   data[5] = 1;
- 
+
   int bytes = uart_write(esp32_add, code_send, data, 6);
-  
-  if (bytes != 10) {
+
+  if (bytes != 10)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
-  memcpy(&state_read, &buffer[3], 4);
+  memcpy(&state_read, &buffer[3], 1);
+  printf("state_read uart_turn_on_warming: %d\n", state_read);
 
-  if (status != 0 || state_read != state) {
+  if (status != 0 || state_read != state)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
 
   warming_stt = 1;
-  
+
   return 0;
 }
 
-int uart_turn_off_warming() {
-  //have to turn off led
-  //have to stop warming
+int uart_turn_off_warming()
+{
+  // have to turn off led
+  // have to stop warming
   unsigned char data[6];
   int state = 0;
   data[0] = subcode_send_wrk_state;
@@ -347,31 +461,35 @@ int uart_turn_off_warming() {
   data[4] = mat_4;
   data[5] = 0;
   int bytes = uart_write(esp32_add, code_send, data, 6);
-  
-  if (bytes != 10) {
+
+  if (bytes != 10)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
-  memcpy(&state_read, &buffer[3], 4);
+  memcpy(&state_read, &buffer[3], 1);
+  printf("state_read uart_turn_off_warming: %d\n", state_read);
 
-  if (status != 0 || state_read != state) {
+  if (status != 0 || state_read != state)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
   warming_stt = 0;
-  
+
   return 0;
 }
 
-int uart_change_oven_mode() {
-  //have to update oven mode
-  //have to send command to esp32
+int uart_change_oven_mode()
+{
+  // have to update oven mode
+  // have to send command to esp32
   int aux = temp_mode_stt == 1 ? 0 : 1;
   unsigned char data[6];
   data[0] = subcode_send_temp_ctrl;
@@ -381,20 +499,22 @@ int uart_change_oven_mode() {
   data[4] = mat_4;
   data[5] = temp_mode_stt;
   int bytes = uart_write(esp32_add, code_send, data, 6);
-  
-  if (bytes != 10) {
+
+  if (bytes != 10)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
 
-  sleep(0.09);
+  sleep(0.03);
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
-  memcpy(&state_read, &buffer[3], 4);
+  memcpy(&state_read, &buffer[3], 1);
 
-  if (status != 0 || state_read != aux) {
+  if (status != 0 || state_read != aux)
+  {
     fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
@@ -404,7 +524,183 @@ int uart_change_oven_mode() {
   return 0;
 }
 
-void init_system_state() {
+int uart_send_ta_temp(float ta)
+{
+  // have to send temp ta
+  unsigned char data[9];
+  data[0] = subcode_send_ta;
+  data[1] = mat_1;
+  data[2] = mat_2;
+  data[3] = mat_3;
+  data[4] = mat_4;
+  memcpy(&data[5], &ta, 4);
+  int bytes = uart_write(esp32_add, code_send, data, 9);
+
+  if (bytes != 13)
+  {
+    fprintf(stderr, "Falha ao enviar temp ta\n");
+    return -1;
+  }
+
+  sleep(0.03);
+  unsigned char buffer[10];
+  int status = uart_read(buffer, subcode_send_ta);
+
+  float temp_read;
+  memcpy(&temp_read, &buffer[3], 4);
+
+  if (status != 0 || temp_read != ta)
+  {
+    fprintf(stderr, "Falha ao enviar temp ta\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+int uart_read_ti(float *ti)
+{
+  // have to request temp ti
+  unsigned char data[5];
+  data[0] = subcode_req_ti;
+  data[1] = mat_1;
+  data[2] = mat_2;
+  data[3] = mat_3;
+  data[4] = mat_4;
+  int bytes = uart_write(esp32_add, code_send, data, 5);
+
+  if (bytes != 9)
+  {
+    fprintf(stderr, "Falha ao requisitar temp ti\n");
+    return -1;
+  }
+
+  sleep(0.03);
+  unsigned char buffer[10];
+  int status = uart_read(buffer, subcode_req_ti);
+
+  float temp_read;
+  memcpy(&temp_read, &buffer[3], 4);
+
+  if (status != 0)
+  {
+    fprintf(stderr, "Falha ao requisitar temp ti\n");
+    return -1;
+  }
+
+  *ti = temp_read;
+
+  return 0;
+}
+
+int uart_read_tr(float *tr)
+{
+  // have to request temp tr
+  unsigned char data[5];
+  data[0] = subcode_req_tr;
+  data[1] = mat_1;
+  data[2] = mat_2;
+  data[3] = mat_3;
+  data[4] = mat_4;
+  int bytes = uart_write(esp32_add, code_send, data, 5);
+
+  if (bytes != 9)
+  {
+    fprintf(stderr, "Falha ao requisitar temp tr\n");
+    return -1;
+  }
+
+  sleep(0.03);
+  unsigned char buffer[10];
+  int status = uart_read(buffer, subcode_req_tr);
+
+  float temp_read;
+  memcpy(&temp_read, &buffer[3], 4);
+
+  if (status != 0)
+  {
+    fprintf(stderr, "Falha ao requisitar temp tr\n");
+    return -1;
+  }
+
+  *tr = temp_read;
+
+  return 0;
+}
+
+int i2c_read_ta(float *ta)
+{
+  *ta = 24.2f;
+  return 0;
+  
+
+  // int i = 0;
+  // while (i < 4)
+  // {
+  //   /* Set the sensor to forced mode */
+  //   rslt = bme280_set_sensor_mode(BME280_FORCED_MODE, dev1);
+  //   if (rslt != BME280_OK)
+  //   {
+  //       fprintf(stderr, "Failed to set sensor mode (code %+d).", rslt);
+  //       break;
+  //   }
+
+  //   /* Wait for the measurement to complete and print data */
+  //   dev1->delay_us(req_delay, dev1->intf_ptr);
+  //   rslt = bme280_get_sensor_data(BME280_ALL, &comp_data, dev1);
+  //   if (rslt != BME280_OK)
+  //   {
+  //       fprintf(stderr, "Failed to get sensor data (code %+d).", rslt);
+  //       break;
+  //   }
+
+  //   float temp, press, hum;
+
+  //   temp = comp_data.temperature;
+  //   press = 0.01 * comp_data.pressure;
+  //   hum = comp_data.humidity;  
+
+  //   printf("temp: %2.f; press: %2.f; hum: %2.f\n", temp, press, hum);
+  // }
+
+  // return 0;
+}
+
+int temperature_control()
+{
+  float ta, ti, tr;
+  int status;
+
+  status = i2c_read_ta(&ta);
+  if (status != 0) {
+    ta = 24.2f;
+  } else {
+    printf("TA: %f\n", ta);
+  }
+  
+  status = uart_send_ta_temp(ta);
+
+  status = uart_read_ti(&ti);
+  if (status != 0) {
+    ti = 30.0f;
+  } else {
+    printf("TI: %f\n", ti);
+  }
+
+  status = uart_read_tr(&tr);
+  if (status != 0) {
+    tr = 30.0f;
+  } else {
+    printf("TR: %f\n", tr);
+  }
+
+  fflush(stdout);
+
+  return 0;
+}
+
+void init_system_state()
+{
   system_stt = 0;
   warming_stt = 0;
   temp_mode_stt = 1;
@@ -414,68 +710,81 @@ void init_system_state() {
   uart_change_oven_mode();
 }
 
-int terminate_uart() {
+int terminate_uart()
+{
   int status = close(uart_fs);
 
   return status;
 }
 
-void main_loop() {
+void main_loop()
+{
   int status, command;
 
-  while (1) {
-    //read commands from uart
+  while (1)
+  {
+    // read commands from uart
     status = uart_read_usr_commands(&command);
-    if (status != 0) {
+    if (status != 0)
+    {
       printf("Falha em ler comandos da uart\n");
     }
 
-    switch (command) {
-      case usr_on_oven:
-        status = uart_turn_on_oven();
-        if (status != 0) {
-          fprintf(stderr, "Falha em ligar forno\n");
-        }
-        break;
+    switch (command)
+    {
+    case usr_on_oven:
+      status = uart_turn_on_oven();
+      if (status != 0)
+      {
+        fprintf(stderr, "Falha em ligar forno\n");
+      }
+      break;
 
-      case usr_off_oven:
-        status = uart_turn_off_oven();
-        if (status != 0) {
-          fprintf(stderr, "Falha em desligar forno\n");
-        }
-        break;
+    case usr_off_oven:
+      status = uart_turn_off_oven();
+      if (status != 0)
+      {
+        fprintf(stderr, "Falha em desligar forno\n");
+      }
+      break;
 
-      case usr_on_warming:
-        status = uart_turn_on_warming();
-        if (status != 0) {
-          fprintf(stderr, "Falha em iniciar aquecimento\n");
-        }
-        break;
+    case usr_on_warming:
+      status = uart_turn_on_warming();
+      if (status != 0)
+      {
+        fprintf(stderr, "Falha em iniciar aquecimento\n");
+      }
+      break;
 
-      case usr_off_warming:
-        status = uart_turn_off_warming();
-        if (status != 0) {
-          fprintf(stderr, "Falha em parar aquecimento\n");
-        }
-        break;
-    
-      case usr_menu:
-        status = uart_change_oven_mode();
-        if (status != 0) {
-          fprintf(stderr, "Falha em mudar modo do forno\n");
-        }
-        break;
+    case usr_off_warming:
+      status = uart_turn_off_warming();
+      if (status != 0)
+      {
+        fprintf(stderr, "Falha em parar aquecimento\n");
+      }
+      break;
 
-      default:
-        //printf("Comando não reconhecido\n");
-        break;
+    case usr_menu:
+      status = uart_change_oven_mode();
+      if (status != 0)
+      {
+        fprintf(stderr, "Falha em mudar modo do forno\n");
+      }
+      break;
+
+    default:
+      // printf("Comando não reconhecido\n");
+      break;
     }
-    
-    sleep(0.5);
+
+    temperature_control();
+
+    sleep(3);
   }
 }
 
-void terminate_prog(int d) {
+void terminate_prog(int d)
+{
   printf("\nCtrl-c pressed\n");
   fflush(stdout);
 
@@ -484,39 +793,43 @@ void terminate_prog(int d) {
   exit(1);
 }
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv)
+{
   signal(SIGINT, terminate_prog);
 
   int status;
 
-  //init connection with raspberry
+  // init connection with raspberry
   status = init_GPIO(pin_res, pin_cooler);
-  if (status != 0) {
+  if (status != 0)
+  {
     fprintf(stderr, "Falha em iniciar conexão com GPIO\n");
     exit(EXIT_FAILURE);
   }
 
-  //init serial connection I2C with sensor BME280
-  status = init_I2C(dev_path_i2c);
-  if (status != 0) {
+  // init serial connection I2C with sensor BME280
+  status = 0;//init_I2C(dev_path_i2c);
+  if (status != 0)
+  {
     fprintf(stderr, "Falha em iniciar conexão com I2C\n");
     exit(EXIT_FAILURE);
   }
 
-  //init serial connection UART with ESCP32 in MODBUS protocol
+  // init serial connection UART with ESCP32 in MODBUS protocol
   status = init_UART(dev_path_uart);
-  if (status != 0) {
+  if (status != 0)
+  {
     fprintf(stderr, "Falha em iniciar conexão com ESP32\n");
     exit(EXIT_FAILURE);
   }
 
-  //init system state
+  // init system state
   init_system_state();
 
-  //loop principal
+  // loop principal
   main_loop();
 
-  //close connections
+  // close connections
   terminate_uart();
 
   return 0;
