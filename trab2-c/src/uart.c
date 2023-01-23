@@ -202,7 +202,7 @@ int uart_turn_on_oven(int *system_stt)
   return 0;
 }
 
-int uart_turn_off_oven(int *system_stt)
+int uart_turn_off_oven(int *system_stt, int *warming_stt)
 {
   // have to turn off led
   unsigned char data[6];
@@ -231,6 +231,7 @@ int uart_turn_off_oven(int *system_stt)
   memcpy(&state_read, &buffer[3], 1);
 
   *system_stt = 0;
+  *warming_stt = 0;
 
   if (status != 0 || state_read != state)
   {
@@ -481,6 +482,9 @@ int uart_read_tr(float *tr)
 
 int uart_send_ctrl_signal(int signal)
 {
+  if (signal < 0 && signal > -40) {
+    signal = -40;
+  }
   // have to send control signal
   unsigned char data[9];
   data[0] = subcode_send_ctrl;
@@ -549,7 +553,7 @@ void uart_init_system_state(int *system_stt, int *warming_stt, int *temp_mode_st
   *warming_stt = 0;
   *temp_mode_stt = 1;
 
-  uart_turn_off_oven(system_stt);
+  uart_turn_off_oven(system_stt, warming_stt);
   uart_turn_off_warming(warming_stt);
   uart_change_oven_mode(temp_mode_stt);
 

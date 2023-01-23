@@ -105,6 +105,11 @@ int gpio_update_pwm(int signal)
   }
   else if (signal < 0)
   {
+    signal = signal * -1;
+    if (signal < 40)
+    {
+      signal = 40;
+    }
     softPwmWrite(pin_cooler, signal);
     softPwmWrite(pin_res, 0);
     sig_value_res = 0;
@@ -121,49 +126,62 @@ int gpio_update_pwm(int signal)
   return 0;
 }
 
+void get_temp_ta(float *ta) {
+  if (i2c_read_ta(&ta) != 0)
+  {
+    *ta = 20.2f;
+  }
+}
+
+void get_temp_ti(float *ti)
+{
+  int status;
+  if ((status = uart_read_ti(ti)) != 0)
+  {
+    if ((status = uart_read_ti(ti)) != 0)
+    {
+      *ti = last_ti;
+    }
+  }
+  if (status == 0)
+  {
+    last_ti = *ti;
+  }
+}
+
+void get_temp_tr_dash(float *tr)
+{
+  int status;
+  if ((status = uart_read_tr(tr)) != 0)
+  {
+    if ((status = uart_read_tr(tr)) != 0)
+    {
+      *tr = last_tr;
+    }
+  }
+  if (status == 0)
+  {
+    last_tr = *tr;
+  }
+}
+
 int temperature_control()
 {
   float ta, ti, tr;
   int status;
 
-  status = i2c_read_ta(&ta);
-  if (status != 0)
-  {
-    ta = 24.2f;
-  }
+  get_temp_ta(&ta);
 
-  status = uart_send_ta_temp(ta);
+  uart_send_ta_temp(ta);
 
-  status = uart_read_ti(&ti);
-  if (status != 0)
-  {
-    status = uart_read_ti(&ti);
-    if (status != 0)
-    {
-      ti = last_ti;
-    }
-  }
-  if (status == 0)
-  {
-    last_ti = ti;
-  }
+  get_temp_ti(&ti);
 
+  //temp mode dashboard
   if (temp_mode_stt == 0)
   {
-    status = uart_read_tr(&tr);
-    if (status != 0)
-    {
-      status = uart_read_tr(&tr);
-      if (status != 0)
-      {
-        tr = last_tr;
-      }
-    }
-    if (status == 0)
-    {
-      last_tr = tr;
-    }
+    get_temp_tr_dash(&tr);
   }
+  //is warming and temp mode curve
   else if (warming_stt == 1 && temp_mode_stt == 1)
   {
     clock_t time_now = clock();
@@ -196,13 +214,12 @@ int temperature_control()
 
 void main_loop()
 {
-  int status, command, count_sleep = 0;
+  int command, count_sleep = 0;
 
   while (1)
   {
     // read commands from uart
-    status = uart_read_usr_commands(&command);
-    if (status != 0)
+    if (uart_read_usr_commands(&command) != 0)
     {
       printf("Falha em ler comandos da uart\n");
     }
@@ -210,40 +227,35 @@ void main_loop()
     switch (command)
     {
     case usr_on_oven:
-      status = uart_turn_on_oven(&system_stt);
-      if (status != 0)
+      if (uart_turn_on_oven(&system_stt) != 0)
       {
         fprintf(stderr, "Falha em ligar forno\n");
       }
       break;
 
     case usr_off_oven:
-      status = uart_turn_off_oven(&system_stt);
-      if (status != 0)
+      if (uart_turn_off_oven(&system_stt, &warming_stt) != 0)
       {
         fprintf(stderr, "Falha em desligar forno\n");
       }
       break;
 
     case usr_on_warming:
-      status = uart_turn_on_warming(&warming_stt, temp_mode_stt, &time_curve_mode);
-      if (status != 0)
+      if (uart_turn_on_warming(&warming_stt, temp_mode_stt, &time_curve_mode) != 0)
       {
         fprintf(stderr, "Falha em iniciar aquecimento\n");
       }
       break;
 
     case usr_off_warming:
-      status = uart_turn_off_warming(&warming_stt);
-      if (status != 0)
+      if (uart_turn_off_warming(&warming_stt) != 0)
       {
         fprintf(stderr, "Falha em parar aquecimento\n");
       }
       break;
 
     case usr_menu:
-      status = uart_change_oven_mode(&temp_mode_stt);
-      if (status != 0)
+      if (uart_change_oven_mode(&temp_mode_stt) != 0)
       {
         fprintf(stderr, "Falha em mudar modo do forno\n");
       }
