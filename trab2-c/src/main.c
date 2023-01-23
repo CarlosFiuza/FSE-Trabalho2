@@ -135,6 +135,7 @@ void get_temp_ti(float *ti)
   {
     if ((status = uart_read_ti(ti)) != 0)
     {
+      // fprintf(stderr, "Falha em solicitar temp ti\n");
       *ti = last_ti;
     }
   }
@@ -151,6 +152,7 @@ void get_temp_tr_dash(float *tr)
   {
     if ((status = uart_read_tr(tr)) != 0)
     {
+      // fprintf(stderr, "Falha em solicitar temp tr\n");
       *tr = last_tr;
     }
   }
@@ -214,7 +216,7 @@ void main_loop()
     // read commands from uart
     if (uart_read_usr_commands(&command) != 0)
     {
-      //printf("Falha em ler comandos da uart\n");
+      printf("Falha em ler comandos da uart\n");
     }
 
     switch (command)
@@ -268,7 +270,7 @@ void main_loop()
 
     count_sleep++;
 
-    sleep(1);
+    usleep(500000);
   }
 }
 
@@ -293,6 +295,22 @@ int main(int argc, char **argv)
 {
   signal(SIGINT, terminate_prog);
   prog_running = 1;
+
+  float Kp, Ki, Kd;
+  if (argc > 2)
+  {
+    Kp = atof(argv[1]);
+    Ki = atof(argv[2]);
+    Kd = atof(argv[3]);
+    printf("Kp: %f\nKi: %f\nKd: %f\n", Kp, Ki, Kd);
+  }
+  else
+  {
+    printf("Parâmetros PID (Kp, Ki, Kd) não informados, usando valores padrões\n");
+    Kp = 30.0f;
+    Ki = 0.2f;
+    Kd = 400.0f;
+  }
 
   // init connection with raspberry
   if (init_GPIO(pin_res, pin_cooler) != 0)
@@ -325,7 +343,7 @@ int main(int argc, char **argv)
   }
 
   // configure parameters pid
-  pid_configura_constantes(30.0, 0.2, 400.0);
+  pid_configura_constantes(Kp, Ki, Kd);
 
   // init system state
   uart_init_system_state(&system_stt, &warming_stt, &temp_mode_stt);

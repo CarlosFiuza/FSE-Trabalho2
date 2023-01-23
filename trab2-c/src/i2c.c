@@ -76,7 +76,7 @@ void user_delay_us(uint32_t period, void *intf_ptr)
 int8_t set_stream_sensor_data_forced_mode()
 {
   /* Variable to define the result */
-  rslt = BME280_OK;
+  int8_t rslt = BME280_OK;
 
   /* Variable to define the selecting sensors */
   uint8_t settings_sel = 0;
@@ -93,10 +93,10 @@ int8_t set_stream_sensor_data_forced_mode()
 
   /* Set the sensor settings */
   rslt = bme280_set_sensor_settings(settings_sel, &dev);
+
   if (rslt != BME280_OK)
   {
-    //fprintf(stderr, "Failed to set sensor settings (code %+d).\n", rslt);
-
+    // fprintf(stderr, "Failed to set sensor settings (code %+d).\n", rslt);
     return rslt;
   }
 
@@ -148,40 +148,41 @@ void *i2c_read_ta(void *arg)
 {
   ptr_thread_arg targ = (ptr_thread_arg)arg;
 
-  while (*(targ->running) == 1)
+  while (1)
   {
-    rslt = set_stream_sensor_data_forced_mode();
-    if (rslt != BME280_OK)
+    int8_t rslt = set_stream_sensor_data_forced_mode();
+
+    if (rslt == BME280_OK)
     {
-      // fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
-      continue;
+      break;
     }
 
+    usleep(250000);
+  }
+
+  while (1)
+  {
 
     /* Set the sensor to forced mode */
     rslt = bme280_set_sensor_mode(BME280_FORCED_MODE, &dev);
 
-    if (rslt != BME280_OK)
+    if (rslt == BME280_OK)
     {
-      // fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
-      continue;
+      /* Wait for the measurement to complete and print data */
+      dev.delay_us(req_delay, dev.intf_ptr);
+      rslt = bme280_get_sensor_data(BME280_ALL, &comp_data, &dev);
+
+      if (rslt == BME280_OK)
+      {
+        float temp;
+
+        temp = comp_data.temperature;
+
+        *(targ->ta) = temp;
+      }
     }
 
-    /* Wait for the measurement to complete and print data */
-    dev.delay_us(req_delay, dev.intf_ptr);
-    rslt = bme280_get_sensor_data(BME280_ALL, &comp_data, &dev);
-
-    if (rslt != BME280_OK)
-    {
-      // fprintf(stderr, "Failed to get sensor data (code %+d).\n", rslt);
-      continue;
-    }
-
-    float temp;
-
-    temp = comp_data.temperature;
-
-    *(targ->ta) = temp;
+    usleep(250000);
   }
 }
 

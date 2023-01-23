@@ -55,17 +55,16 @@ int uart_init()
 
 void sleep_to_read()
 {
-  sleep(0.25);
+  usleep(250000);
 }
 
 int uart_read(unsigned char *buffer, char sub_code)
 {
-  int bytes_read = read(uart_fs, &buffer[0], 3);
+  int bytes_read = read(uart_fs, &buffer[0], 255);
 
   if (bytes_read < 0)
   {
     fprintf(stderr, "Falha na leitura UART\n");
-    tcflush(uart_fs, TCIFLUSH);
     return -1;
   }
   else if (bytes_read == 0)
@@ -82,21 +81,18 @@ int uart_read(unsigned char *buffer, char sub_code)
 
   if (sub_code_read == subcode_send_ctrl || sub_code_read == subcode_send_sign_ref)
   {
-    bytes_read += read(uart_fs, &buffer[3], 2);
     memcpy(&crc_read, &buffer[3], 2);
     data_size = 1;
   }
   else
   {
-    bytes_read += read(uart_fs, &buffer[3], 6);
     memcpy(&crc_read, &buffer[7], 2);
     data_size = 5;
   }
 
-  if (sub_code != '0' && sub_code_read != sub_code)
+  if (sub_code_read != sub_code)
   {
     // fprintf(stderr, "Sub-code recebido invalido\n");
-    tcflush(uart_fs, TCIFLUSH);
     return -3;
   }
 
@@ -151,24 +147,24 @@ int uart_read_usr_commands(int *command)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
-  int status = uart_read(buffer, '0');
+  unsigned char buffer[255];
+  int status = uart_read(buffer, subcode_req_comm);
 
   if (status < 0)
   {
-    memset(buffer, 0, 10);
-    status = uart_read(buffer, '0');
+    memset(buffer, 0, 255);
+    status = uart_read(buffer, subcode_req_comm);
   }
 
   memcpy(command, &buffer[3], 4);
 
-  if (status < 0)
+  if (status == -2 || status == 0)
   {
-    // printf("Falha na leitura de comandos do usr\n");
-    return -1;
+    return 0;
   }
 
-  return 0;
+  // printf("Falha na leitura de comandos do usr\n");
+  return -1;
 }
 
 int uart_turn_on_oven(int *system_stt)
@@ -192,19 +188,20 @@ int uart_turn_on_oven(int *system_stt)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_sys_state);
 
   int state_read;
   memcpy(&state_read, &buffer[3], 1);
 
-  *system_stt = 1;
 
   if (status != 0 || state_read != state)
   {
     // fprintf(stderr, "Falha ao ligar sistema\n");
     return -1;
   }
+
+  *system_stt = 1;
 
   return 0;
 }
@@ -231,20 +228,20 @@ int uart_turn_off_oven(int *system_stt, int *warming_stt)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_sys_state);
 
   int state_read;
   memcpy(&state_read, &buffer[3], 1);
-
-  *system_stt = 0;
-  *warming_stt = 0;
 
   if (status != 0 || state_read != state)
   {
     //fprintf(stderr, "Falha ao desligar sistema\n");
     return -1;
   }
+
+  *system_stt = 0;
+  *warming_stt = 0;
 
   return 0;
 }
@@ -279,7 +276,7 @@ int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, st
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
@@ -289,7 +286,6 @@ int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, st
   {
     gettimeofday(time_curve_mode, 0);
   }
-  *warming_stt = 1;
 
 
   if (status != 0 || state_read != state)
@@ -297,6 +293,8 @@ int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, st
     // fprintf(stderr, "Falha ao ligar aquecimento\n");
     return -1;
   }
+
+  *warming_stt = 1;
 
   return 0;
 }
@@ -323,19 +321,20 @@ int uart_turn_off_warming(int *warming_stt)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
   memcpy(&state_read, &buffer[3], 1);
 
-  *warming_stt = 0;
 
   if (status != 0 || state_read != state)
   {
     // fprintf(stderr, "Falha ao desligar aquecimento\n");
     return -1;
   }
+
+  *warming_stt = 0;
 
   return 0;
 }
@@ -371,7 +370,7 @@ int uart_change_oven_mode(int *temp_mode_stt)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_wrk_state);
 
   int state_read;
@@ -406,7 +405,7 @@ int uart_send_ta_temp(float ta)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_ta);
 
   float temp_read;
@@ -440,7 +439,7 @@ int uart_read_ti(float *ti)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_req_ti);
 
   float temp_read;
@@ -448,7 +447,7 @@ int uart_read_ti(float *ti)
 
   if (status != 0)
   {
-    // fprintf(stderr, "Falha ao requisitar temp ti\n");
+    // fprintf(stderr, "Falha ao requisitar temp ti %d\n", status);
     return -1;
   }
 
@@ -476,7 +475,7 @@ int uart_read_tr(float *tr)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_req_tr);
 
   if (status != 0)
@@ -516,7 +515,7 @@ int uart_send_ctrl_signal(int signal)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_ctrl);
 
   if (status != 0)
@@ -548,7 +547,7 @@ int uart_send_ref_signal(float signal)
 
   sleep_to_read();
 
-  unsigned char buffer[10];
+  unsigned char buffer[255];
   int status = uart_read(buffer, subcode_send_sign_ref);
 
   if (status != 0)
