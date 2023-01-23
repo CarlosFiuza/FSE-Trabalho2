@@ -165,7 +165,6 @@ void get_temp_tr_dash(float *tr)
 int temperature_control()
 {
   float ti, tr;
-  int status;
 
   uart_send_ta_temp(ta);
 
@@ -184,7 +183,7 @@ int temperature_control()
     long diff_time = time_now.tv_sec - time_curve_mode.tv_sec;
     tr = get_tr_by_curve(diff_time);
 
-    status = uart_send_ref_signal(tr);
+    uart_send_ref_signal(tr);
   }
 
   if (warming_stt == 1)
@@ -194,8 +193,8 @@ int temperature_control()
     double signal_ctrl;
     signal_ctrl = pid_controle((double)ti);
 
-    status = uart_send_ctrl_signal((int)signal_ctrl);
-    status = gpio_update_pwm((int)signal_ctrl);
+    uart_send_ctrl_signal((int)signal_ctrl);
+    gpio_update_pwm((int)signal_ctrl);
   }
   else {
     sig_value_res = 0;
@@ -233,6 +232,7 @@ void main_loop()
       {
         //fprintf(stderr, "Falha em desligar forno\n");
       }
+      gpio_update_pwm(0);
       break;
 
     case usr_on_warming:
@@ -247,6 +247,7 @@ void main_loop()
       {
         //fprintf(stderr, "Falha em parar aquecimento\n");
       }
+      gpio_update_pwm(0);
       break;
 
     case usr_menu:
