@@ -148,17 +148,17 @@ int uart_read_usr_commands(int *command)
 
   if (status < 0)
   {
-    memset(buffer, 0, 255);
+    memset(buffer, 0, 10);
     status = uart_read(buffer, '0');
   }
+
+  memcpy(command, &buffer[3], 4);
 
   if (status < 0)
   {
     // printf("Falha na leitura de comandos do usr\n");
     return -1;
   }
-
-  memcpy(command, &buffer[3], 4);
 
   return 0;
 }
