@@ -95,7 +95,7 @@ int8_t set_stream_sensor_data_forced_mode()
   rslt = bme280_set_sensor_settings(settings_sel, &dev);
   if (rslt != BME280_OK)
   {
-    fprintf(stderr, "Failed to set sensor settings (code %+d).", rslt);
+    //fprintf(stderr, "Failed to set sensor settings (code %+d).\n", rslt);
 
     return rslt;
   }
@@ -148,16 +148,22 @@ void *i2c_read_ta(void *arg)
 {
   ptr_thread_arg targ = (ptr_thread_arg)arg;
 
-  while (*(targ->running))
+  while (*(targ->running) == 1)
   {
-    set_stream_sensor_data_forced_mode();
+    rslt = set_stream_sensor_data_forced_mode();
+    if (rslt != BME280_OK)
+    {
+      // fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
+      continue;
+    }
+
+
     /* Set the sensor to forced mode */
     rslt = bme280_set_sensor_mode(BME280_FORCED_MODE, &dev);
 
     if (rslt != BME280_OK)
     {
       // fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
-      sleep(0.2);
       continue;
     }
 
@@ -168,7 +174,6 @@ void *i2c_read_ta(void *arg)
     if (rslt != BME280_OK)
     {
       // fprintf(stderr, "Failed to get sensor data (code %+d).\n", rslt);
-      sleep(0.2);
       continue;
     }
 
@@ -176,10 +181,7 @@ void *i2c_read_ta(void *arg)
 
     temp = comp_data.temperature;
 
-    if (temp != 0.0f)
-    {
-      *(targ->ta) = temp;
-    }
+    *(targ->ta) = temp;
   }
 }
 

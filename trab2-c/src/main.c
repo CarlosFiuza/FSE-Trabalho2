@@ -8,7 +8,7 @@
 #include "pid.h"
 #include <wiringPi.h>
 #include <softPwm.h>
-#include <time.h>
+#include <sys/time.h>
 #include "uart.h"
 #include "logger.h"
 #include "i2c.h"
@@ -27,7 +27,7 @@ int system_stt;
 int warming_stt;
 int temp_mode_stt;
 
-clock_t time_curve_mode;
+struct timeval time_curve_mode;
 float last_tr = 30.0f;
 float last_ti = 25.0f;
 int sig_value_res = 0;
@@ -52,9 +52,9 @@ int init_GPIO(int pin_gpio1, int pin_gpio2)
   return 0;
 }
 
-float get_tr_by_curve(double seconds)
+float get_tr_by_curve(long seconds)
 {
-  if (seconds < 60.0)
+  if (seconds < 60)
   {
     return 25.0f;
   }
@@ -177,8 +177,9 @@ int temperature_control()
   //is warming and temp mode curve
   else if (warming_stt == 1 && temp_mode_stt == 1)
   {
-    clock_t time_now = clock();
-    double diff_time = ((double)time_now - time_curve_mode) / CLOCKS_PER_SEC;
+    struct timeval time_now;
+    gettimeofday(&time_now, 0);
+    long diff_time = time_now.tv_sec - time_curve_mode.tv_sec;
     tr = get_tr_by_curve(diff_time);
 
     status = uart_send_ref_signal(tr);
@@ -192,7 +193,6 @@ int temperature_control()
     signal_ctrl = pid_controle((double)ti);
 
     status = uart_send_ctrl_signal((int)signal_ctrl);
-
     status = gpio_update_pwm((int)signal_ctrl);
   }
   else {
@@ -214,7 +214,7 @@ void main_loop()
     // read commands from uart
     if (uart_read_usr_commands(&command) != 0)
     {
-      printf("Falha em ler comandos da uart\n");
+      //printf("Falha em ler comandos da uart\n");
     }
 
     switch (command)
@@ -222,35 +222,35 @@ void main_loop()
     case usr_on_oven:
       if (uart_turn_on_oven(&system_stt) != 0)
       {
-        fprintf(stderr, "Falha em ligar forno\n");
+        //fprintf(stderr, "Falha em ligar forno\n");
       }
       break;
 
     case usr_off_oven:
       if (uart_turn_off_oven(&system_stt, &warming_stt) != 0)
       {
-        fprintf(stderr, "Falha em desligar forno\n");
+        //fprintf(stderr, "Falha em desligar forno\n");
       }
       break;
 
     case usr_on_warming:
       if (uart_turn_on_warming(&warming_stt, temp_mode_stt, system_stt, &time_curve_mode) != 0)
       {
-        fprintf(stderr, "Falha em iniciar aquecimento\n");
+        //fprintf(stderr, "Falha em iniciar aquecimento\n");
       }
       break;
 
     case usr_off_warming:
       if (uart_turn_off_warming(&warming_stt) != 0)
       {
-        fprintf(stderr, "Falha em parar aquecimento\n");
+        //fprintf(stderr, "Falha em parar aquecimento\n");
       }
       break;
 
     case usr_menu:
       if (uart_change_oven_mode(&temp_mode_stt) != 0)
       {
-        fprintf(stderr, "Falha em mudar modo do forno\n");
+        //fprintf(stderr, "Falha em mudar modo do forno\n");
       }
       break;
 

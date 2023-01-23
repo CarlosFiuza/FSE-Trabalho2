@@ -1,12 +1,12 @@
 #ifndef UART_H_
 #define UART_H_
-#include <time.h>
+#include <sys/time.h>
 
 int uart_init();
 int uart_read_usr_commands(int *command);
 int uart_turn_on_oven(int *system_stt);
 int uart_turn_off_oven(int *system_stt, int *warming_stt);
-int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, clock_t *time_curve_mode);
+int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, struct timeval *time_curve_mode);
 int uart_turn_off_warming(int *warming_stt);
 int uart_change_oven_mode(int *temp_mode_stt);
 int uart_send_ta_temp(float ta);

@@ -6,7 +6,7 @@
 #include <string.h>
 #include "crc16.h"
 #include "uart.h"
-#include <time.h>
+#include <sys/time.h>
 
 #define dev_path_uart "/dev/serial0"
 
@@ -65,6 +65,7 @@ int uart_read(unsigned char *buffer, char sub_code)
   if (bytes_read < 0)
   {
     fprintf(stderr, "Falha na leitura UART\n");
+    tcflush(uart_fs, TCIFLUSH);
     return -1;
   }
   else if (bytes_read == 0)
@@ -95,6 +96,7 @@ int uart_read(unsigned char *buffer, char sub_code)
   if (sub_code != '0' && sub_code_read != sub_code)
   {
     // fprintf(stderr, "Sub-code recebido invalido\n");
+    tcflush(uart_fs, TCIFLUSH);
     return -3;
   }
 
@@ -106,6 +108,7 @@ int uart_read(unsigned char *buffer, char sub_code)
   if (crc != crc_read)
   {
     fprintf(stderr, "Crc invalido\n");
+    tcflush(uart_fs, TCIFLUSH);
     return -4;
   }
 
@@ -194,7 +197,6 @@ int uart_turn_on_oven(int *system_stt)
 
   int state_read;
   memcpy(&state_read, &buffer[3], 1);
-  printf("state_read uart_turn_on_oven: %d\n", state_read);
 
   *system_stt = 1;
 
@@ -247,7 +249,7 @@ int uart_turn_off_oven(int *system_stt, int *warming_stt)
   return 0;
 }
 
-int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, clock_t *time_curve_mode)
+int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, struct timeval *time_curve_mode)
 {
   // have to look oven mode
   // have to turn on led
@@ -283,12 +285,12 @@ int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, cl
   int state_read;
   memcpy(&state_read, &buffer[3], 1);
 
+  if (temp_mode_stt == 1 && *warming_stt != 1)
+  {
+    gettimeofday(time_curve_mode, 0);
+  }
   *warming_stt = 1;
 
-  if (temp_mode_stt == 1)
-  {
-    *time_curve_mode = clock();
-  }
 
   if (status != 0 || state_read != state)
   {
@@ -477,14 +479,14 @@ int uart_read_tr(float *tr)
   unsigned char buffer[10];
   int status = uart_read(buffer, subcode_req_tr);
 
-  float temp_read;
-  memcpy(&temp_read, &buffer[3], 4);
-
   if (status != 0)
   {
     // fprintf(stderr, "Falha ao requisitar temp tr\n");
     return -1;
   }
+
+  float temp_read;
+  memcpy(&temp_read, &buffer[3], 4);
 
   *tr = temp_read;
 
