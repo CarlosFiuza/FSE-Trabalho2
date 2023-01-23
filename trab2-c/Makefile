@@ -12,7 +12,7 @@ EXE = bin/bin
 all: clean $(EXE) 
     
 $(EXE): $(OBJ) 
-	$(CC) $(LDFLAGS) $(OBJDIR)/*.o -o $@ -lwiringPi
+	$(CC) $(LDFLAGS) $(OBJDIR)/*.o -o $@ -lwiringPi -lpthread -pthread
 
 $(OBJDIR)/%.o : $(SRCDIR)/%.c
 	@mkdir -p $(@D)

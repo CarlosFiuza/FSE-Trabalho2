@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <string.h>
+#include <pthread.h>
 #include "i2c.h"
 
 #define dev_path_i2c "/dev/i2c-1"
@@ -18,6 +19,13 @@ struct bme280_dev dev;
 int8_t rslt = BME280_OK;
 struct bme280_data comp_data;
 uint32_t req_delay;
+pthread_t thread;
+
+typedef struct
+{
+  int *running;
+  float *ta;
+} thread_arg, *ptr_thread_arg;
 
 struct identifier
 {
@@ -105,7 +113,7 @@ int i2c_init()
 
   int8_t rslt = BME280_OK;
 
-  if ((id.fd = open("/dev/i2c-1", O_RDWR)) < 0)
+  if ((id.fd = open(dev_path_i2c, O_RDWR)) < 0)
   {
     fprintf(stderr, "Falha em i2c bus\n");
     return -1;
@@ -136,21 +144,20 @@ int i2c_init()
   return 0;
 }
 
-int i2c_read_ta(float *ta)
+void *i2c_read_ta(void *arg)
 {
-  set_stream_sensor_data_forced_mode();
+  ptr_thread_arg targ = (ptr_thread_arg)arg;
 
-  int i = 0;
-
-  while (i < 4)
+  while (*(targ->running))
   {
+    set_stream_sensor_data_forced_mode();
     /* Set the sensor to forced mode */
     rslt = bme280_set_sensor_mode(BME280_FORCED_MODE, &dev);
 
     if (rslt != BME280_OK)
     {
-      fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
-      i++;
+      // fprintf(stderr, "Failed to set sensor mode (code %+d).\n", rslt);
+      sleep(0.2);
       continue;
     }
 
@@ -160,21 +167,33 @@ int i2c_read_ta(float *ta)
 
     if (rslt != BME280_OK)
     {
-      fprintf(stderr, "Failed to get sensor data (code %+d).\n", rslt);
-      i++;
+      // fprintf(stderr, "Failed to get sensor data (code %+d).\n", rslt);
+      sleep(0.2);
       continue;
     }
 
-    float temp, press, hum;
+    float temp;
 
     temp = comp_data.temperature;
-    press = 0.01 * comp_data.pressure;
-    hum = comp_data.humidity;
 
-    *ta = temp;
-    return 0;
+    if (temp != 0.0f)
+    {
+      *(targ->ta) = temp;
+    }
   }
+}
 
-  *ta = 24.0f;
-  return -1;
+void i2c_init_thread(int *running, float *ta)
+{
+  thread_arg arguments;
+
+  arguments.running = running;
+  arguments.ta = ta;
+
+  pthread_create(&thread, NULL, i2c_read_ta, &arguments);
+}
+
+void i2c_join_thread()
+{
+  pthread_join(thread, NULL);
 }

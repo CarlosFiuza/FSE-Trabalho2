@@ -75,32 +75,37 @@ int uart_read(unsigned char *buffer, char sub_code)
   // verifica sub_code
   char sub_code_read = buffer[2];
 
+  // calcula CRC para conferir dados
+  short crc_read;
+  int data_size;
+
+  if (sub_code_read == subcode_send_ctrl || sub_code_read == subcode_send_sign_ref)
+  {
+    bytes_read += read(uart_fs, &buffer[3], 2);
+    memcpy(&crc_read, &buffer[3], 2);
+    data_size = 1;
+  }
+  else
+  {
+    bytes_read += read(uart_fs, &buffer[3], 6);
+    memcpy(&crc_read, &buffer[7], 2);
+    data_size = 5;
+  }
+
   if (sub_code != '0' && sub_code_read != sub_code)
   {
     // fprintf(stderr, "Sub-code recebido invalido\n");
     return -3;
   }
 
-  // calcula CRC para conferir dados
-  short crc_read;
-
-  if (sub_code_read == subcode_send_ctrl || sub_code_read == subcode_send_sign_ref)
-  {
-    return 0;
-  }
-
-  bytes_read += read(uart_fs, &buffer[3], 6);
-  memcpy(&crc_read, &buffer[7], 2);
-
   short crc = 0;
   crc = CRC16(crc, buffer[0]);
   crc = CRC16(crc, buffer[1]);
-  crc = calcula_CRC(crc, &buffer[2], 5);
+  crc = calcula_CRC(crc, &buffer[2], data_size);
 
   if (crc != crc_read)
   {
     fprintf(stderr, "Crc invalido\n");
-    tcflush(uart_fs, TCIFLUSH);
     return -4;
   }
 
@@ -242,11 +247,17 @@ int uart_turn_off_oven(int *system_stt, int *warming_stt)
   return 0;
 }
 
-int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, clock_t *time_curve_mode)
+int uart_turn_on_warming(int *warming_stt, int temp_mode_stt, int system_stt, clock_t *time_curve_mode)
 {
   // have to look oven mode
   // have to turn on led
   // have to init warming
+
+  if (system_stt == 0) {
+    printf("Nao eh possivel ligar aquecimento com sistema desligado\n");
+    return 0;
+  }
+
   unsigned char data[6];
   int state = 1;
   data[0] = subcode_send_wrk_state;

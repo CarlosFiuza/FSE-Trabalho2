@@ -2,6 +2,7 @@
 #define I2C_H_
 
 int i2c_init();
-int i2c_read_ta(float *ta);
+void i2c_init_thread(int *running, float *ta);
+void i2c_join_thread();
 
 #endif

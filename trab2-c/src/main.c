@@ -32,6 +32,8 @@ float last_tr = 30.0f;
 float last_ti = 25.0f;
 int sig_value_res = 0;
 int sig_value_cooler = 0;
+int prog_running = 0;
+float ta = 24.0f;
 
 int init_GPIO(int pin_gpio1, int pin_gpio2)
 {
@@ -126,13 +128,6 @@ int gpio_update_pwm(int signal)
   return 0;
 }
 
-void get_temp_ta(float *ta) {
-  if (i2c_read_ta(&ta) != 0)
-  {
-    *ta = 20.2f;
-  }
-}
-
 void get_temp_ti(float *ti)
 {
   int status;
@@ -167,10 +162,8 @@ void get_temp_tr_dash(float *tr)
 
 int temperature_control()
 {
-  float ta, ti, tr;
+  float ti, tr;
   int status;
-
-  get_temp_ta(&ta);
 
   uart_send_ta_temp(ta);
 
@@ -241,7 +234,7 @@ void main_loop()
       break;
 
     case usr_on_warming:
-      if (uart_turn_on_warming(&warming_stt, temp_mode_stt, &time_curve_mode) != 0)
+      if (uart_turn_on_warming(&warming_stt, temp_mode_stt, system_stt, &time_curve_mode) != 0)
       {
         fprintf(stderr, "Falha em iniciar aquecimento\n");
       }
@@ -283,6 +276,7 @@ void terminate_prog(int d)
 {
   printf("\nCtrl-c pressed\n");
   fflush(stdout);
+  prog_running = 0;
 
   uart_terminate(&system_stt, &warming_stt, &temp_mode_stt);
 
@@ -290,12 +284,15 @@ void terminate_prog(int d)
 
   log_close();
 
+  i2c_join_thread();
+
   exit(1);
 }
 
 int main(int argc, char **argv)
 {
   signal(SIGINT, terminate_prog);
+  prog_running = 1;
 
   // init connection with raspberry
   if (init_GPIO(pin_res, pin_cooler) != 0)
@@ -310,6 +307,9 @@ int main(int argc, char **argv)
     fprintf(stderr, "Falha em iniciar conexão com I2C\n");
     exit(EXIT_FAILURE);
   }
+
+  // start thread to read TA temperature
+  i2c_init_thread(&prog_running, &ta);
 
   // init serial connection UART with ESCP32 in MODBUS protocol
   if (uart_init() != 0)
